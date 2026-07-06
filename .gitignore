@@ -1,0 +1,51 @@
+# Dependencies
+node_modules/
+**/node_modules/
+
+# Environment files and secrets
+.env
+.env.*
+!.env.example
+!.env.sample
+
+# Local databases and private data
+*.sqlite
+*.sqlite3
+*.db
+*.pem
+*.key
+*.crt
+*.p12
+*.pfx
+
+# Build output and caches
+/dist/
+/build/
+/.next/
+/.vite/
+/.cache/
+/.turbo/
+coverage/
+*.tsbuildinfo
+
+# Uploads and local media
+server/uploads/*
+!server/uploads/.gitkeep
+
+# Logs and temp files
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+tmp/
+temp/
+
+# OS/editor files
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Test output
+coverage/
