@@ -1,0 +1,304 @@
+// ==========================================================
+// Prisma schema — Collaborative Project Management System
+// ==========================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================================
+// ENUMS
+// ==========================================================
+
+enum ProjectRole {
+  OWNER
+  ADMIN
+  MEMBER
+}
+
+enum TaskPriority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum TaskStatus {
+  TODO
+  IN_PROGRESS
+  IN_REVIEW
+  DONE
+}
+
+enum NotificationType {
+  TASK_ASSIGNED
+  COMMENT_ADDED
+  MENTIONED
+  PROJECT_INVITATION
+  TASK_DUE_SOON
+  TASK_MOVED
+  TASK_COMPLETED
+}
+
+enum ActivityAction {
+  PROJECT_CREATED
+  PROJECT_UPDATED
+  MEMBER_INVITED
+  MEMBER_REMOVED
+  BOARD_CREATED
+  LIST_CREATED
+  LIST_REORDERED
+  TASK_CREATED
+  TASK_UPDATED
+  TASK_MOVED
+  TASK_ASSIGNED
+  TASK_DELETED
+  TASK_COMPLETED
+  COMMENT_ADDED
+  COMMENT_EDITED
+  COMMENT_DELETED
+  ATTACHMENT_ADDED
+  ATTACHMENT_REMOVED
+}
+
+// ==========================================================
+// USERS & AUTH
+// ==========================================================
+
+model User {
+  id           String   @id @default(uuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  avatarUrl    String?  @map("avatar_url")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  // Relations
+  ownedProjects       Project[]            @relation("ProjectOwner")
+  projectMemberships  ProjectMember[]
+  assignedTasks       Task[]               @relation("TaskAssignee")
+  createdTasks        Task[]               @relation("TaskCreator")
+  comments            Comment[]
+  attachments         Attachment[]
+  notifications       Notification[]
+  activityLogs        ActivityLog[]
+  refreshTokens       RefreshToken[]
+  passwordResetTokens PasswordResetToken[]
+
+  @@map("users")
+}
+
+model RefreshToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  revoked   Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  tokenHash String   @map("token_hash")
+  used      Boolean  @default(false)
+  expiresAt DateTime @map("expires_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("password_reset_tokens")
+}
+
+// ==========================================================
+// PROJECTS & MEMBERSHIP
+// ==========================================================
+
+model Project {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  ownerId     String   @map("owner_id")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  owner        User            @relation("ProjectOwner", fields: [ownerId], references: [id])
+  members      ProjectMember[]
+  boards       Board[]
+  activityLogs ActivityLog[]
+
+  @@index([ownerId])
+  @@map("projects")
+}
+
+model ProjectMember {
+  id        String      @id @default(uuid())
+  projectId String      @map("project_id")
+  userId    String      @map("user_id")
+  role      ProjectRole @default(MEMBER)
+  joinedAt  DateTime    @default(now()) @map("joined_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([projectId, userId])
+  @@index([userId])
+  @@map("project_members")
+}
+
+// ==========================================================
+// BOARDS, LISTS, TASKS
+// ==========================================================
+
+model Board {
+  id        String   @id @default(uuid())
+  projectId String   @map("project_id")
+  name      String
+  position  Float    @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  lists   List[]
+
+  @@index([projectId])
+  @@map("boards")
+}
+
+model List {
+  id        String   @id @default(uuid())
+  boardId   String   @map("board_id")
+  name      String
+  position  Float    @default(0)
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  board Board  @relation(fields: [boardId], references: [id], onDelete: Cascade)
+  tasks Task[]
+
+  @@index([boardId])
+  @@map("lists")
+}
+
+model Task {
+  id          String       @id @default(uuid())
+  listId      String       @map("list_id")
+  title       String
+  description String?
+  position    Float        @default(0)
+  priority    TaskPriority @default(MEDIUM)
+  status      TaskStatus   @default(TODO)
+  dueDate     DateTime?    @map("due_date")
+  assigneeId  String?      @map("assignee_id")
+  createdById String       @map("created_by")
+  createdAt   DateTime     @default(now()) @map("created_at")
+  updatedAt   DateTime     @updatedAt @map("updated_at")
+
+  list         List          @relation(fields: [listId], references: [id], onDelete: Cascade)
+  assignee     User?         @relation("TaskAssignee", fields: [assigneeId], references: [id])
+  createdBy    User          @relation("TaskCreator", fields: [createdById], references: [id])
+  labels       TaskLabel[]
+  comments     Comment[]
+  attachments  Attachment[]
+  activityLogs ActivityLog[]
+
+  @@index([listId])
+  @@index([assigneeId])
+  @@map("tasks")
+}
+
+model TaskLabel {
+  id     String @id @default(uuid())
+  taskId String @map("task_id")
+  name   String
+  color  String
+
+  task Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@index([taskId])
+  @@map("task_labels")
+}
+
+// ==========================================================
+// COMMENTS & ATTACHMENTS
+// ==========================================================
+
+model Comment {
+  id        String    @id @default(uuid())
+  taskId    String    @map("task_id")
+  authorId  String    @map("author_id")
+  body      String
+  createdAt DateTime  @default(now()) @map("created_at")
+  editedAt  DateTime? @map("edited_at")
+
+  task   Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  author User @relation(fields: [authorId], references: [id])
+
+  @@index([taskId])
+  @@map("comments")
+}
+
+model Attachment {
+  id         String   @id @default(uuid())
+  taskId     String   @map("task_id")
+  uploadedBy String   @map("uploaded_by")
+  fileUrl    String   @map("file_url")
+  fileName   String   @map("file_name")
+  fileType   String   @map("file_type")
+  size       Int
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  task     Task @relation(fields: [taskId], references: [id], onDelete: Cascade)
+  uploader User @relation(fields: [uploadedBy], references: [id])
+
+  @@index([taskId])
+  @@map("attachments")
+}
+
+// ==========================================================
+// NOTIFICATIONS & ACTIVITY LOG
+// ==========================================================
+
+model Notification {
+  id        String           @id @default(uuid())
+  userId    String           @map("user_id")
+  type      NotificationType
+  payload   Json
+  isRead    Boolean          @default(false) @map("is_read")
+  createdAt DateTime         @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, isRead])
+  @@map("notifications")
+}
+
+model ActivityLog {
+  id        String         @id @default(uuid())
+  projectId String         @map("project_id")
+  taskId    String?        @map("task_id")
+  actorId   String         @map("actor_id")
+  action    ActivityAction
+  metadata  Json?
+  createdAt DateTime       @default(now()) @map("created_at")
+
+  project Project @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  task    Task?   @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  actor   User    @relation(fields: [actorId], references: [id])
+
+  @@index([projectId])
+  @@index([taskId])
+  @@map("activity_logs")
+}
